@@ -664,14 +664,38 @@
         
         // 从API获取真实视频URL（API返回JSON: {success, video_url}）
         async function fetchVideoUrl() {
-            const apiUrl = 'https://api.qzqi.com/api/v1/DyRandomVideo?_t=' + Math.random();
-            const resp = await fetch(apiUrl, { method: 'GET', mode: 'cors' });
-            if (!resp.ok) throw new Error('API HTTP ' + resp.status);
-            const data = await resp.json();
-            if (!data || !data.success || !data.video_url) {
-                throw new Error(data?.msg || 'API返回格式异常');
+            const directUrl = 'https://api.qzqi.com/api/v1/DyRandomVideo?_t=' + Math.random();
+            // 回退源：同源部署的CORS代理、公共CORS服务；直接API作为第一个尝试
+            const urls = [
+                directUrl,
+                '/api/v1/DyRandomVideo?_t=' + Math.random(),
+                'https://api.allorigins.win/raw?url=' + encodeURIComponent(directUrl),
+                'https://corsproxy.io/?url=' + encodeURIComponent(directUrl),
+                'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(directUrl),
+            ];
+            const errors = [];
+            for (const url of urls) {
+                try {
+                    const resp = await fetch(url, { method: 'GET', mode: 'cors', cache: 'no-store' });
+                    if (!resp.ok) {
+                        errors.push(`${url.substring(0, 60)}… HTTP ${resp.status}`);
+                        continue;
+                    }
+                    const text = await resp.text();
+                    let data;
+                    try {
+                        data = JSON.parse(text);
+                    } catch (_) {
+                        errors.push(`${url.substring(0, 60)}… JSON解析失败`);
+                        continue;
+                    }
+                    if (data && data.success && data.video_url) return data.video_url;
+                    errors.push(`${url.substring(0, 60)}… success=false: ${data?.msg || ''}`);
+                } catch (e) {
+                    errors.push(`${url.substring(0, 60)}… ${e.name || 'Error'}`);
+                }
             }
-            return data.video_url;
+            throw new Error('所有回退源均失败：' + errors.join(' | '));
         }
 
         // 下载视频（模拟浏览器"三个点"下载功能）
