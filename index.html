@@ -542,7 +542,7 @@
             </div>
             <div class="player-container">
                 <video id="player" controls webkit-playsinline playsinline>
-                    <source src="https://api.mmp.cc/api/ksvideo?type=mp4&id=jk" type="video/mp4">
+                    <source src="https://api.qzqi.com/api/v1/DyRandomVideo" type="video/mp4">
                     您的浏览器不支持HTML5视频播放。
                 </video>
                 <div class="error-message">
@@ -669,7 +669,7 @@
             let videoUrl = player.src;
             if (!videoUrl) {
                 // 使用默认的视频API地址
-                videoUrl = 'https://api.mmp.cc/api/ksvideo?type=mp4&id=jk';
+                videoUrl = 'https://api.qzqi.com/api/v1/DyRandomVideo';
             }
             
             // 显示加载动画
@@ -851,7 +851,7 @@
             let videoUrl = player.src;
             if (!videoUrl) {
                 // 如果主播放器URL为空，使用默认URL
-                videoUrl = 'https://api.mmp.cc/api/ksvideo?type=mp4&id=jk';
+                videoUrl = 'https://api.qzqi.com/api/v1/DyRandomVideo';
             }
             
             // 移除URL中的随机参数，只分享基础URL
@@ -886,7 +886,7 @@
         function playNext() {
             loading.style.display = 'block';
             errorMessage.style.display = 'none';
-            player.src = 'https://api.mmp.cc/api/ksvideo?type=mp4&id=jk&_t=' + Math.random();
+            player.src = 'https://api.qzqi.com/api/v1/DyRandomVideo?_t=' + Math.random();
             player.play().catch(err => {
                 console.error('播放失败:', err);
                 errorMessage.style.display = 'block';
