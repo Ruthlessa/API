@@ -542,7 +542,6 @@
             </div>
             <div class="player-container">
                 <video id="player" controls webkit-playsinline playsinline>
-                    <source src="https://api.mmp.cc/api/ksvideo?type=mp4&id=jk" type="video/mp4">
                     您的浏览器不支持HTML5视频播放。
                 </video>
                 <div class="error-message">
@@ -663,13 +662,55 @@
             downloadCountElement.textContent = downloadCount;
         }
         
+        // 从API获取真实视频URL（API返回JSON: {success, video_url}）
+        async function fetchVideoUrl() {
+            const directUrl = 'https://api.qzqi.com/api/v1/DyRandomVideo?_t=' + Math.random();
+            // 回退源：同源部署的CORS代理、公共CORS服务；直接API作为第一个尝试
+            const urls = [
+                directUrl,
+                '/api/v1/DyRandomVideo?_t=' + Math.random(),
+                'https://api.allorigins.win/raw?url=' + encodeURIComponent(directUrl),
+                'https://corsproxy.io/?url=' + encodeURIComponent(directUrl),
+                'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(directUrl),
+            ];
+            const errors = [];
+            for (const url of urls) {
+                try {
+                    const resp = await fetch(url, { method: 'GET', mode: 'cors', cache: 'no-store' });
+                    if (!resp.ok) {
+                        errors.push(`${url.substring(0, 60)}… HTTP ${resp.status}`);
+                        continue;
+                    }
+                    const text = await resp.text();
+                    let data;
+                    try {
+                        data = JSON.parse(text);
+                    } catch (_) {
+                        errors.push(`${url.substring(0, 60)}… JSON解析失败`);
+                        continue;
+                    }
+                    if (data && data.success && data.video_url) return data.video_url;
+                    errors.push(`${url.substring(0, 60)}… success=false: ${data?.msg || ''}`);
+                } catch (e) {
+                    errors.push(`${url.substring(0, 60)}… ${e.name || 'Error'}`);
+                }
+            }
+            throw new Error('所有回退源均失败：' + errors.join(' | '));
+        }
+
         // 下载视频（模拟浏览器"三个点"下载功能）
-        function downloadVideo() {
-            // 获取视频URL，如果player.src为空，使用默认URL
+        async function downloadVideo() {
+            // 获取视频URL，如果player.src为空，从API获取
             let videoUrl = player.src;
             if (!videoUrl) {
-                // 使用默认的视频API地址
-                videoUrl = 'https://api.mmp.cc/api/ksvideo?type=mp4&id=jk';
+                try {
+                    videoUrl = await fetchVideoUrl();
+                } catch (e) {
+                    console.error('获取视频URL失败:', e);
+                    loading.style.display = 'none';
+                    alert('获取视频地址失败：' + e.message);
+                    return;
+                }
             }
             
             // 显示加载动画
@@ -846,12 +887,17 @@
         }
         
         // 分享视频
-        function shareVideo() {
+        async function shareVideo() {
             // 获取当前视频URL，使用主播放器的URL
             let videoUrl = player.src;
             if (!videoUrl) {
-                // 如果主播放器URL为空，使用默认URL
-                videoUrl = 'https://api.mmp.cc/api/ksvideo?type=mp4&id=jk';
+                try {
+                    videoUrl = await fetchVideoUrl();
+                } catch (e) {
+                    console.error('获取视频URL失败:', e);
+                    alert('获取视频地址失败：' + e.message);
+                    return;
+                }
             }
             
             // 移除URL中的随机参数，只分享基础URL
@@ -883,14 +929,23 @@
         
 
         
-        function playNext() {
+        async function playNext() {
             loading.style.display = 'block';
             errorMessage.style.display = 'none';
-            player.src = 'https://api.mmp.cc/api/ksvideo?type=mp4&id=jk&_t=' + Math.random();
-            player.play().catch(err => {
-                console.error('播放失败:', err);
+            try {
+                const videoUrl = await fetchVideoUrl();
+                player.src = videoUrl;
+                player.play().catch(err => {
+                    console.error('播放失败:', err);
+                    errorMessage.style.display = 'block';
+                });
+            } catch (err) {
+                console.error('获取视频URL失败:', err);
                 errorMessage.style.display = 'block';
-            });
+                errorMessage.querySelector('p').textContent = '获取视频地址失败：' + err.message;
+                // 3秒后重试
+                setTimeout(playNext, 3000);
+            }
         }
         
         function hideLoading() {
@@ -966,6 +1021,8 @@
         initDownloadCount();
         initShareCount();
         player.loop = loopPlay;
+        // 页面加载后自动获取并播放第一个视频
+        playNext();
         });
     </script>
     
