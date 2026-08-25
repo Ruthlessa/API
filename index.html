@@ -662,63 +662,20 @@
             downloadCountElement.textContent = downloadCount;
         }
         
-        // 从API获取真实视频URL（API返回JSON: {success, video_url}）
-        async function fetchVideoUrl() {
-            const directUrl = 'https://api.qzqi.com/api/v1/DyRandomVideo?_t=' + Math.random();
-            // 回退源：同源部署的CORS代理、公共CORS服务；直接API作为第一个尝试
-            const urls = [
-                directUrl,
-                '/api/v1/DyRandomVideo?_t=' + Math.random(),
-                'https://api.allorigins.win/raw?url=' + encodeURIComponent(directUrl),
-                'https://corsproxy.io/?url=' + encodeURIComponent(directUrl),
-                'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(directUrl),
-            ];
-            const errors = [];
-            for (const url of urls) {
-                try {
-                    const resp = await fetch(url, { method: 'GET', mode: 'cors', cache: 'no-store' });
-                    if (!resp.ok) {
-                        errors.push(`${url.substring(0, 60)}… HTTP ${resp.status}`);
-                        continue;
-                    }
-                    const text = await resp.text();
-                    let data;
-                    try {
-                        data = JSON.parse(text);
-                    } catch (_) {
-                        errors.push(`${url.substring(0, 60)}… JSON解析失败`);
-                        continue;
-                    }
-                    if (data && data.success && data.video_url) return data.video_url;
-                    errors.push(`${url.substring(0, 60)}… success=false: ${data?.msg || ''}`);
-                } catch (e) {
-                    errors.push(`${url.substring(0, 60)}… ${e.name || 'Error'}`);
-                }
-            }
-            throw new Error('所有回退源均失败：' + errors.join(' | '));
-        }
+        // 随机视频API — 直接302重定向到MP4，<video>标签自动跟随重定向播放，无需CORS/fetch
+        const VIDEO_API = 'https://api.yujn.cn/api/nvda.php?type=video&_t=';
 
         // 下载视频（模拟浏览器"三个点"下载功能）
-        async function downloadVideo() {
-            // 获取视频URL，如果player.src为空，从API获取
-            let videoUrl = player.src;
-            if (!videoUrl) {
-                try {
-                    videoUrl = await fetchVideoUrl();
-                } catch (e) {
-                    console.error('获取视频URL失败:', e);
-                    loading.style.display = 'none';
-                    alert('获取视频地址失败：' + e.message);
-                    return;
-                }
-            }
-            
+        function downloadVideo() {
+            // 使用当前播放器中视频的实际URL（302重定向后的真实MP4地址）
+            let videoUrl = player.currentSrc || player.src || (VIDEO_API + Math.random());
+
             // 显示加载动画
             loading.style.display = 'block';
-            
+
             // 控制台输出当前下载的URL，方便调试
             console.log('正在下载视频:', videoUrl);
-            
+
             // 移除URL中的随机参数，确保下载的是基础视频
             const baseUrl = videoUrl.replace(/&_t=.*$/, '');
             console.log('使用基础URL:', baseUrl);
@@ -887,18 +844,9 @@
         }
         
         // 分享视频
-        async function shareVideo() {
-            // 获取当前视频URL，使用主播放器的URL
-            let videoUrl = player.src;
-            if (!videoUrl) {
-                try {
-                    videoUrl = await fetchVideoUrl();
-                } catch (e) {
-                    console.error('获取视频URL失败:', e);
-                    alert('获取视频地址失败：' + e.message);
-                    return;
-                }
-            }
+        function shareVideo() {
+            // 使用当前播放器中视频的实际URL（302重定向后的真实MP4地址）
+            let videoUrl = player.currentSrc || player.src || (VIDEO_API + Math.random());
             
             // 移除URL中的随机参数，只分享基础URL
             const shareUrl = videoUrl.replace(/&_t=.*$/, '');
@@ -929,28 +877,26 @@
         
 
         
-        async function playNext() {
+        function playNext() {
             loading.style.display = 'block';
             errorMessage.style.display = 'none';
-            try {
-                const videoUrl = await fetchVideoUrl();
-                player.src = videoUrl;
-                player.play().catch(err => {
-                    console.error('播放失败:', err);
-                    errorMessage.style.display = 'block';
-                });
-            } catch (err) {
-                console.error('获取视频URL失败:', err);
+            // 直接设置video src为API地址，浏览器自动跟随302重定向到真实MP4
+            player.src = VIDEO_API + Math.random();
+            player.load();
+            player.play().catch(err => {
+                console.error('播放失败:', err);
                 errorMessage.style.display = 'block';
-                errorMessage.querySelector('p').textContent = '获取视频地址失败：' + err.message;
-                // 3秒后重试
-                setTimeout(playNext, 3000);
-            }
+            });
         }
         
+        // 视频加载失败时自动重试（最多3次）
+        let retryCount = 0;
+        const MAX_RETRIES = 3;
+
         function hideLoading() {
             loading.style.display = 'none';
             errorMessage.style.display = 'none';
+            retryCount = 0;
         }
         
         function toggleFullscreen() {
@@ -988,10 +934,18 @@
         shareBtn.addEventListener('click', shareVideo);
         fullscreenBtn.addEventListener('click', toggleFullscreen);
         
+        // 视频加载失败时自动重试
         player.addEventListener('error', () => {
             console.error('视频加载失败，尝试下一个');
             errorMessage.style.display = 'block';
-            setTimeout(playNext, 3000);
+            if (retryCount < MAX_RETRIES) {
+                retryCount++;
+                setTimeout(playNext, 2000);
+            } else {
+                errorMessage.querySelector('p').textContent = '视频加载失败，请点击"播放下一个"重试';
+                loading.style.display = 'none';
+                retryCount = 0;
+            }
         });
         
         player.addEventListener('loadeddata', hideLoading);
