@@ -542,7 +542,6 @@
             </div>
             <div class="player-container">
                 <video id="player" controls webkit-playsinline playsinline>
-                    <source src="https://api.mmp.cc/api/ksvideo?type=mp4&id=jk" type="video/mp4">
                     您的浏览器不支持HTML5视频播放。
                 </video>
                 <div class="error-message">
@@ -663,21 +662,20 @@
             downloadCountElement.textContent = downloadCount;
         }
         
+        // 随机视频API — 直接302重定向到MP4，<video>标签自动跟随重定向播放，无需CORS/fetch
+        const VIDEO_API = 'https://api.yujn.cn/api/nvda.php?type=video&_t=';
+
         // 下载视频（模拟浏览器"三个点"下载功能）
         function downloadVideo() {
-            // 获取视频URL，如果player.src为空，使用默认URL
-            let videoUrl = player.src;
-            if (!videoUrl) {
-                // 使用默认的视频API地址
-                videoUrl = 'https://api.mmp.cc/api/ksvideo?type=mp4&id=jk';
-            }
-            
+            // 使用当前播放器中视频的实际URL（302重定向后的真实MP4地址）
+            let videoUrl = player.currentSrc || player.src || (VIDEO_API + Math.random());
+
             // 显示加载动画
             loading.style.display = 'block';
-            
+
             // 控制台输出当前下载的URL，方便调试
             console.log('正在下载视频:', videoUrl);
-            
+
             // 移除URL中的随机参数，确保下载的是基础视频
             const baseUrl = videoUrl.replace(/&_t=.*$/, '');
             console.log('使用基础URL:', baseUrl);
@@ -847,12 +845,8 @@
         
         // 分享视频
         function shareVideo() {
-            // 获取当前视频URL，使用主播放器的URL
-            let videoUrl = player.src;
-            if (!videoUrl) {
-                // 如果主播放器URL为空，使用默认URL
-                videoUrl = 'https://api.mmp.cc/api/ksvideo?type=mp4&id=jk';
-            }
+            // 使用当前播放器中视频的实际URL（302重定向后的真实MP4地址）
+            let videoUrl = player.currentSrc || player.src || (VIDEO_API + Math.random());
             
             // 移除URL中的随机参数，只分享基础URL
             const shareUrl = videoUrl.replace(/&_t=.*$/, '');
@@ -886,16 +880,23 @@
         function playNext() {
             loading.style.display = 'block';
             errorMessage.style.display = 'none';
-            player.src = 'https://api.mmp.cc/api/ksvideo?type=mp4&id=jk&_t=' + Math.random();
+            // 直接设置video src为API地址，浏览器自动跟随302重定向到真实MP4
+            player.src = VIDEO_API + Math.random();
+            player.load();
             player.play().catch(err => {
                 console.error('播放失败:', err);
                 errorMessage.style.display = 'block';
             });
         }
         
+        // 视频加载失败时自动重试（最多3次）
+        let retryCount = 0;
+        const MAX_RETRIES = 3;
+
         function hideLoading() {
             loading.style.display = 'none';
             errorMessage.style.display = 'none';
+            retryCount = 0;
         }
         
         function toggleFullscreen() {
@@ -933,10 +934,18 @@
         shareBtn.addEventListener('click', shareVideo);
         fullscreenBtn.addEventListener('click', toggleFullscreen);
         
+        // 视频加载失败时自动重试
         player.addEventListener('error', () => {
             console.error('视频加载失败，尝试下一个');
             errorMessage.style.display = 'block';
-            setTimeout(playNext, 3000);
+            if (retryCount < MAX_RETRIES) {
+                retryCount++;
+                setTimeout(playNext, 2000);
+            } else {
+                errorMessage.querySelector('p').textContent = '视频加载失败，请点击"播放下一个"重试';
+                loading.style.display = 'none';
+                retryCount = 0;
+            }
         });
         
         player.addEventListener('loadeddata', hideLoading);
@@ -966,6 +975,8 @@
         initDownloadCount();
         initShareCount();
         player.loop = loopPlay;
+        // 页面加载后自动获取并播放第一个视频
+        playNext();
         });
     </script>
     
